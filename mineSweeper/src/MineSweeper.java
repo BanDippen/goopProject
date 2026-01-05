@@ -1,12 +1,15 @@
+import javafx.animation.KeyFrame;
+import javafx.animation.Timeline;
 import javafx.application.Application;
 import javafx.scene.Scene;
-import javafx.scene.control.Button;
-import javafx.scene.control.Label;
+import javafx.scene.control.*;
 import javafx.scene.input.MouseButton;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.GridPane;
+import javafx.scene.layout.VBox;
 import javafx.scene.text.Font;
 import javafx.stage.Stage;
+import javafx.util.Duration;
 
 import java.util.ArrayList;
 import java.util.Random;
@@ -20,31 +23,34 @@ public class MineSweeper extends Application {
 
     // ---------------- GAME CONFIG ----------------
     private final int tileSize = 70;       // Size of each tile in pixels
-    private final int gridSize = 10;        // Width and height of the square grid
-    private final int numRow = gridSize;    // Number of rows
-    private final int numCol = gridSize;    // Number of columns
-    private final int numBombs = 15;        // Number of bombs
+    private int gridSize;        // Width and height of the square grid
+    private int numRow;    // Number of rows
+    private int numCol;    // Number of columns
+    private int numBombs;        // Number of bombs
+    private boolean cheats;
+
+    private Timeline timer;
+    private int secondsElapsed = 0;
+    private final Label timerLabel = new Label("Time: 0");
+
+    private Stage stage;
 
     // ---------------- GAME STATE ----------------
     private int tilesClicked = 0;           // How many tiles have been revealed
     private boolean gameOver = false;       // True if the player hits a mine or wins
 
-    private MineGrid[][] board = new MineGrid[numRow][numCol];  // 2D board of tiles
-    private ArrayList<MineGrid> mineList = new ArrayList<>();   // List of all mines for easy revealing
+    private boardCell[][] board;  // 2D board of tiles
+    private final ArrayList<boardCell> mineList = new ArrayList<>();   // List of all mines for easy revealing
 
-    private Label textLabel = new Label("Minesweeper");         // Top label showing game messages
+    private final Label textLabel = new Label("Minesweeper");         // Top label showing game messages
 
-    // ---------------- INNER CLASS ----------------
-    /**
-     * Represents a single tile in the Minesweeper board
-     * Extends JavaFX Button and stores its row/col and mine status
-     */
-    private class MineGrid extends Button {
+    /* this is a singel cell which CAN have a mine in the board. */
+    private class boardCell extends Button {
         final int row;
         final int col;
         private boolean mine = false;   // True if this tile contains a mine
 
-        public MineGrid(int row, int col) {
+        public boardCell(int row, int col) {
             this.row = row;
             this.col = col;
             setMinSize(tileSize, tileSize);                 // Set button size
@@ -61,14 +67,13 @@ public class MineSweeper extends Application {
         }
     }
 
-    class desConfig extends Button {
+    static class DesConfig{
         final String playerName;
-        int time;
         int gridSize;
         int desBomb;
         boolean desCheat;
 
-        desConfig(String playerName, int desGrid, int desBomb, boolean desCheat){
+        DesConfig(String playerName, int desGrid, int desBomb, boolean desCheat){
             this.playerName = playerName;
             this.gridSize = desGrid;
             this.desBomb = desBomb;
@@ -77,46 +82,34 @@ public class MineSweeper extends Application {
 
     }
 
-    // ---------------- ADJACENCY HELPERS ----------------
-    // Arrays for checking all 8 neighbors
+    /* This is for adjanct cells. */
     private static final int[] adjR = {-1, -1, -1, 0, 0, 1, 1, 1};
     private static final int[] adjC = {-1, 0, 1, -1, 1, -1, 0, 1};
-
-    /**
-     * Loops over all adjacent tiles of a given tile and applies a BiConsumer action
-     */
     private void forAdj(int r, int c, BiConsumer<Integer, Integer> action) {
         for (int i = 0; i < adjR.length; i++) {   // Must use adjR.length, not gridSize
             action.accept(r + adjR[i], c + adjC[i]);
         }
     }
 
-    // ---------------- HELPER METHODS ----------------
-    /**
-     * Returns true if the tile at (r,c) contains a mine
-     */
+    /* If this contains a mine, it will return TRUE */
     private boolean isMine(int r, int c) {
         if (r < 0 || r >= numRow || c < 0 || c >= numCol) return false; // Out of bounds check
         return board[r][c].mineState();
     }
 
-    /**
-     * Returns 1 if the tile contains a mine, 0 otherwise (used for counting)
-     */
+    /* so if it contains mine, it will return 1. Easy way to count mines if looped ;)*/
     private int countMine(int r, int c) {
         return isMine(r, c) ? 1 : 0;
     }
 
-    /**
-     * Place a number of mines randomly on the board
-     */
+   /* place mines at random places across the board */
     private void placeMines(int bombNumber) {
         Random random = new Random();
         int placed = 0;
         while (placed < bombNumber) {
             int r = random.nextInt(numRow);
             int c = random.nextInt(numCol);
-            MineGrid cell = board[r][c];
+            boardCell cell = board[r][c];
             if (!cell.mineState()) {    // Only place mine if none exists
                 cell.setMine(true);
                 mineList.add(cell);
@@ -125,26 +118,22 @@ public class MineSweeper extends Application {
         }
     }
 
-    /**
-     * Reveals all mines when the player hits one
-     */
+    /* This reveals all the mines in case of game over */
     private void revealMines() {
-        for (MineGrid cell : mineList) {
+        for (boardCell cell : mineList) {
             cell.setText("💣");   // Show bomb emoji
             cell.setDisable(true); // Disable all mine buttons
         }
+        timer.stop();
         gameOver = true;           // End the game
         textLabel.setText("You hit a mine! Game over!");
     }
 
-    /**
-     * Recursive check of the tile
-     * If no adjacent mines, reveals neighbors recursively
-     */
+    /* Checks if its a mine, hopefully not, and if not reveals all the cells not next to it*/
     private void checkMine(int r, int c) {
         if (r < 0 || r >= numRow || c < 0 || c >= numCol) return;
 
-        MineGrid cell = board[r][c];
+        boardCell cell = board[r][c];
         if (cell.isDisabled()) return;  // Already revealed
 
         cell.setDisable(true);          // Reveal this tile
@@ -165,13 +154,13 @@ public class MineSweeper extends Application {
         // Check for win condition
         if (tilesClicked == numRow * numCol - mineList.size()) {
             gameOver = true;
+            timer.stop();
             textLabel.setText("Congratulations! You won!");
+            textLabel.setText(String.valueOf(timerLabel));
         }
     }
-
-    // ---------------- JAVA FX START ----------------
-    @Override
-    public void start(Stage stage) {
+    /*This is used to create the game board after what the player have wanted as config */
+    private Scene createGameBoard() {
         BorderPane root = new BorderPane();
         GridPane boardPane = new GridPane();
 
@@ -179,12 +168,14 @@ public class MineSweeper extends Application {
         root.setTop(textLabel);
         root.setCenter(boardPane);
 
-        // Initialize board and buttons
+        VBox topBar = new VBox(textLabel, timerLabel);
+        root.setTop(topBar);
+
         for (int r = 0; r < numRow; r++) {
             for (int c = 0; c < numCol; c++) {
-                MineGrid cell = new MineGrid(r, c);
+                boardCell cell = new boardCell(r, c);
                 board[r][c] = cell;
-
+                boardPane.add(cell, c, r);
                 // Mouse click handler
                 cell.setOnMouseClicked(e -> {
                     if (gameOver) return;
@@ -192,7 +183,14 @@ public class MineSweeper extends Application {
                     if (e.getButton() == MouseButton.PRIMARY) {
                         if (cell.isDisabled()) return;
                         if (cell.mineState()) {
-                            revealMines();           // Hit a mine
+                            if (!cheats){
+                                revealMines();
+                            }
+                            else {
+                                cell.setText("💣");
+                            }
+
+                                       // Hit a mine
                         } else {
                             checkMine(cell.row, cell.col); // Safe tile
                         }
@@ -209,22 +207,90 @@ public class MineSweeper extends Application {
                     }
                 });
 
-                boardPane.add(cell, c, r); // Add tile to grid (col,row)
             }
         }
 
-        // Place bombs
         placeMines(numBombs);
 
-        // Create scene and show stage
-        Scene scene = new Scene(root, gridSize * tileSize, gridSize * tileSize + 50);
-        stage.setScene(scene);
+        return new Scene(root,
+                gridSize * tileSize,
+                gridSize * tileSize + 50);
+    }
+
+    /* This is used to create the desired config of the game for the player*/
+    private void startGame(DesConfig config){
+        this.gridSize = config.gridSize;
+        this.numCol = config.gridSize;
+        this.numRow = config.gridSize;
+        this.numBombs = config.desBomb;
+        this.cheats = config.desCheat;
+        this.tilesClicked = 0;
+        
+        this.gameOver = false;
+        this.board = new boardCell[numRow][numCol];
+        this.mineList.clear();
+        Scene gameBoard = createGameBoard();
+        stage.setScene(gameBoard);
+        startTimer();
+    }
+    /* a function to start the timer */
+    private void startTimer() {
+        secondsElapsed = 0;
+        if (timer != null) timer.stop();
+
+        timer = new Timeline(
+                new KeyFrame(Duration.seconds(1), e -> {
+                    secondsElapsed++;
+                    timerLabel.setText("Time: " + secondsElapsed);
+                })
+        );
+        timer.setCycleCount(Timeline.INDEFINITE);
+        timer.play();
+    }
+
+    /* this is what starts when the game begins*/
+    public void start(Stage stage) {
+        this.stage = stage;
+        showStartScreen();
         stage.setTitle("JavaFX Minesweeper");
-        stage.setResizable(false);
         stage.show();
     }
 
-    // ---------------- MAIN METHOD ----------------
+    /*This is the start screen we see */
+    private void showStartScreen() {
+        TextField nameField = new TextField();
+        nameField.setPromptText("Player name");
+
+        Spinner<Integer> gridSpinner = new Spinner<>(5, 30, 10);
+        Spinner<Integer> bombSpinner = new Spinner<>(1, 200, 15);
+
+        Button startButton = new Button("Start Game");
+        CheckBox cheatBox = new CheckBox("Cheats Allowed");
+
+        startButton.setOnAction(e -> {
+            DesConfig config = new DesConfig(
+                    nameField.getText(),
+                    gridSpinner.getValue(),
+                    bombSpinner.getValue(),
+                    cheatBox.isSelected()
+            );
+            startGame(config);
+        });
+
+        VBox layout = new VBox(10,
+                new Label("Name"), nameField,
+                new Label("Grid size"), gridSpinner,
+                new Label("Bombs"), bombSpinner,
+                cheatBox,
+                startButton
+        );
+
+        layout.setStyle("-fx-padding: 20");
+        stage.setScene(new Scene(layout, 300, 300));
+    }
+
+
+    /* this launches the game*/
     public static void main(String[] args) {
         launch(args); // Launches JavaFX application
     }
