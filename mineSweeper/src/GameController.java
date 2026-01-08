@@ -5,6 +5,7 @@ import javafx.scene.control.Label;
 import javafx.scene.input.MouseButton;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.GridPane;
+import javafx.scene.layout.HBox;
 import javafx.util.Duration;
 
 import java.util.ArrayList;
@@ -83,7 +84,7 @@ public class GameController {
 
         return new Scene(root,
                 gridSize * tileSize,
-                gridSize * tileSize + 80);
+                gridSize * tileSize + 18);
     }
 
     private void placeMines() {
