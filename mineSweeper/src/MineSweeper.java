@@ -260,6 +260,7 @@ public class MineSweeper extends Application {
     private void showStartScreen() {
         TextField nameField = new TextField();
         nameField.setPromptText("Player name");
+        TextField bomsTooMany = new TextField();
 
         Spinner<Integer> gridSpinner = new Spinner<>(5, 30, 10);
         Spinner<Integer> bombSpinner = new Spinner<>(1, 200, 15);
@@ -274,7 +275,13 @@ public class MineSweeper extends Application {
                     bombSpinner.getValue(),
                     cheatBox.isSelected()
             );
-            startGame(config);
+
+            if (bombSpinner.getValue() > gridSpinner.getValue())
+            {bomsTooMany.setPromptText("You have placed to many bombs");
+            }
+            if (bombSpinner.getValue() < ((gridSpinner.getValue()*gridSpinner.getValue()))) {
+                startGame(config);
+            }
         });
 
         VBox layout = new VBox(10,
@@ -282,11 +289,12 @@ public class MineSweeper extends Application {
                 new Label("Grid size"), gridSpinner,
                 new Label("Bombs"), bombSpinner,
                 cheatBox,
+                new Label("Have you placed to many bombs?"), bomsTooMany,
                 startButton
         );
 
         layout.setStyle("-fx-padding: 20");
-        stage.setScene(new Scene(layout, 300, 300));
+        stage.setScene(new Scene(layout, 300, 400));
     }
 
 
